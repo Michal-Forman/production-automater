@@ -4,11 +4,12 @@ import csv
 import requests
 import os
 import time
+# Modules
+from plateSlicer import get_gcodes
 
 # Get Shopify access key as environment variable
 load_dotenv()
 SHOPIFY_ACCESS_KEY = os.getenv('SHOPIFY_ACCESS_KEY')
-print(SHOPIFY_ACCESS_KEY)
 
 url = "https://bakers-paradise-6276.myshopify.com/admin/api/2023-07/orders.json"
 
@@ -24,15 +25,17 @@ params = {
 # Global variables
 database_name = "database.csv"
 database_rel_path = f"../{database_name}"
-order_numbers = []
-missing_sku_warning = False
-missing_model_file = False
-items = []
 
 # Main infinite loop
 def periodicly_fetch_orders(interval=10):
     secondsInterval = interval * 60
     while True:
+        order_numbers = []
+        missing_sku_warning = False
+        missing_model_file = False
+        items = []
+        sorted_models = []
+
 
         response = requests.request("GET", url, headers=headers , params=params)
         if response.status_code == 200:
@@ -90,17 +93,38 @@ def periodicly_fetch_orders(interval=10):
                             for x in range(line_item["fulfillable_quantity"]):
 
                                 items.append(full_item)
-
-            # If there are new orders
+            
             if order_numbers:
-                # Get last order number
-                sorted_order_numbers = sorted(order_numbers, reverse=True)
-                last_order_number = sorted_order_numbers[0]
+                # Create a list of sorted models
+                # Initialize an empty dictionary to group SKUs by order_number
+                orders_dict = {}
 
-                # Write the order number to the database
-                with open( database_rel_path, "w", newline='') as file:
-                   writer = csv.writer(file)
-                   writer.writerow([last_order_number])
+                # Iterate through full_items and group SKUs by order_number
+                for item in items:
+                    order_number = item['order_number']
+                    
+                    # If the order_number is not in the dictionary, create an empty list
+                    if order_number not in orders_dict:
+                        orders_dict[order_number] = []
+                    
+                    # Append the sku to the list for this order_number
+                    orders_dict[order_number].append(item['sku'])
+
+                # Use list comprehension to collect the lists of SKUs
+                sorted_models = [skus for skus in orders_dict.values()]
+
+
+                print(get_gcodes(sorted_models))
+                # If there are new orders
+                if order_numbers:
+                    # Get last order number
+                    sorted_order_numbers = sorted(order_numbers, reverse=True)
+                    last_order_number = sorted_order_numbers[0]
+
+                    # Write the order number to the database
+                    with open( database_rel_path, "w", newline='') as file:
+                       writer = csv.writer(file)
+                       writer.writerow([last_order_number])
 
 
             else:
